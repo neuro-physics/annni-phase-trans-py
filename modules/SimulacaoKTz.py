@@ -248,16 +248,21 @@ def KT_susceptibilidade(K,T,H,m_medio):
     """
     retorna a derivada da magnetizacao em relacao a H
     """
-    c = T+K-1.0
-    if c == 0.0:
-        c = numpy.inf
-    else:
-        c = 1.0/c
-    return c * ( sech( (  m_medio*(1.0-K)+H  )/T ) )**2
+    #return 2.0 / (-2.0+2*K+T*(1.0+numpy.cosh(2.0*((1-K)*m_medio+H)/T)) )
+    return 2.0 / (-2.0  +  2.0*K  +  T * (  1.0  +  cosh(2.0*((1-K)*m_medio+H)/T)  ))
+    #return 1.0/(K-1.0+T/(( sech(   ((1-K)*m_medio+H)/T   ) )**2))
 
 #pythran export sech(    float)
 #pythran export sech(  float[])
 #pythran export sech(float64[])
 def sech(x):
-    arg = numpy.exp(-x)
-    return 2.0*arg/( 1.0 + (arg*arg) )
+    return 1.0/cosh(x)
+    #arg = numpy.exp(x)
+    #return 2.0*arg/( 1.0 + (arg*arg) )
+
+#pythran export cosh(    float)
+#pythran export cosh(  float[])
+#pythran export cosh(float64[])
+def cosh(x):
+    arg = numpy.exp(x)
+    return ( 1.0 + (arg*arg) )/(2.0*arg)
