@@ -171,7 +171,7 @@ def RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome):
         FuncMapa = KTzTanh_FuncMapa
 
     # rodando o transiente da dinamica
-    x = numpy.asarray(x0).flatten()
+    x = numpy.asarray(x0,dtype=float).flatten()
     for t in range(t_transiente):
         x = FuncMapa(x, t, K, T, delta, lamb, xR, H)
 
