@@ -3,16 +3,16 @@ import numpy
 import math
 
 #                                          K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome, usar_modulo_de_m, percent_amostras_bootstrap, num_repete_bootstrap
-#pythran export RodaSimulacao_Varios_H(float,       float[], float, float, float, float,          int,     int,     float list,       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,     float64[], float, float, float, float,          int,     int,   float64 list,       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,       float[], float, float, float, float,          int,     int,        float[],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,     float64[], float, float, float, float,          int,     int,      float64[],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,     float64[], float, float, float, float,          int,     int,        float[],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,       float[], float, float, float, float,          int,     int,      float64[],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,     float[::], float, float, float, float,          int,     int,      float[::],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,   float64[::], float, float, float, float,          int,     int,    float64[::],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,   float64[::], float, float, float, float,          int,     int,      float[::],       str,             bool,                      float,                  int)
-#pythran export RodaSimulacao_Varios_H(float,     float[::], float, float, float, float,          int,     int,    float64[::],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,       float[], float, float, float, float,          int,     int,     float list,       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,     float64[], float, float, float, float,          int,     int,   float64 list,       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,       float[], float, float, float, float,          int,     int,        float[],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,     float64[], float, float, float, float,          int,     int,      float64[],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,     float64[], float, float, float, float,          int,     int,        float[],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,       float[], float, float, float, float,          int,     int,      float64[],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,     float[::], float, float, float, float,          int,     int,      float[::],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,   float64[::], float, float, float, float,          int,     int,    float64[::],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,   float64[::], float, float, float, float,          int,     int,      float[::],       str,             bool,                      float,                  int)
+#pythran export RodaSimulacao_Varios_T(float,     float[::], float, float, float, float,          int,     int,    float64[::],       str,             bool,                      float,                  int)
 def RodaSimulacao_Varios_T(K,T_valores,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=10):
     """
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
@@ -55,11 +55,14 @@ def RodaSimulacao_Varios_T(K,T_valores,delta,lamb,xR,H,t_transiente,t_total,x0,m
     for k in range(len(T_valores)):
         T              = T_valores[k]
         x_dados        = RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome)
-        x_dados        = numpy.abs( x_dados[:,1]) if usar_modulo_de_m else x_dados[:,1]
+        x_dados        = numpy.abs( x_dados[:,0]) if usar_modulo_de_m else x_dados[:,0]
         x_media[k]     = numpy.mean(x_dados     )
         x_suscept[k]   = KT_susceptibilidade(K, T, H, x_media[k])
         x_var[k]       = numpy.var( x_dados     )
-        _,x_var_std[k] = bootstrap_variance(x_dados,int(percent_amostras_bootstrap*x_dados.size),num_repete_bootstrap)
+        if num_repete_bootstrap > 0:
+            _,x_var_std[k] = bootstrap_variance(x_dados,int(percent_amostras_bootstrap*x_dados.size),num_repete_bootstrap)
+        else:
+            x_var_std[k] = numpy.nan
     return numpy.array(x_media),numpy.array(x_var),numpy.array(x_var_std),numpy.array(x_suscept)
 
 #                                          K,     T, delta,  lamb,    xR,   H_valores, t_transiente,t_total,             x0, mapa_nome, usar_modulo_de_m, percent_amostras_bootstrap, num_repete_bootstrap
@@ -115,11 +118,14 @@ def RodaSimulacao_Varios_H(K,T,delta,lamb,xR,H_valores,t_transiente,t_total,x0,m
     for k in range(len(H_valores)):
         H              = H_valores[k]
         x_dados        = RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome)
-        x_dados        = numpy.abs( x_dados[:,1]) if usar_modulo_de_m else x_dados[:,1]
+        x_dados        = numpy.abs( x_dados[:,0]) if usar_modulo_de_m else x_dados[:,0]
         x_media[k]     = numpy.mean(x_dados     )
         x_suscept[k]   = KT_susceptibilidade(K, T, H, x_media[k])
         x_var[k]       = numpy.var( x_dados     )
-        _,x_var_std[k] = bootstrap_variance(x_dados,int(percent_amostras_bootstrap*x_dados.size),num_repete_bootstrap)
+        if num_repete_bootstrap > 0:
+            _,x_var_std[k] = bootstrap_variance(x_dados,int(percent_amostras_bootstrap*x_dados.size),num_repete_bootstrap)
+        else:
+            x_var_std[k] = numpy.nan
     return numpy.array(x_media),numpy.array(x_var),numpy.array(x_var_std),numpy.array(x_suscept)
 
 #                                     K,     T, delta,  lamb,    xR,     H, t_transiente,t_total,           x0, mapa_nome
