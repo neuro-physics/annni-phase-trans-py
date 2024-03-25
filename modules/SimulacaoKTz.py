@@ -184,6 +184,98 @@ def RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome):
     
     return numpy.array(x_dados)
 
+#pythran export calc_AutoCorr(  float[], bool)
+#pythran export calc_AutoCorr(float64[], bool)
+def calc_AutoCorr(x, normalize):
+    """
+    calcula a função de autocorrelação AC normalizada ou não
+
+    x -> dados da serie temporal da magnetizacao
+    normalize -> if normalize, then AC[0] is always 1
+                aparentemente, na definição de Chialvo et al 2020 Scientific RepoRtS 10:12145 - https://doi.org/10.1038/s41598-020-69154-0 (Ver material suplementar)
+                a função de AC deve ser sempre 1 em lag = 0 (independente de T)
+    """
+    if normalize:
+        return calc_AutoCorr_normalized(x)
+    return calc_AutoCorr_not_normalized(x)
+
+#pythran export calc_AutoCorr_lag(  float[], tau, bool)
+#pythran export calc_AutoCorr_lag(float64[], tau, bool)
+def calc_AutoCorr_lag(x, tau, normalize):
+    """
+    calcula a função de autocorrelação AC normalizada ou não
+
+    x -> dados da serie temporal da magnetizacao
+    normalize -> if normalize, then AC[0] is always 1
+                aparentemente, na definição de Chialvo et al 2020 Scientific RepoRtS 10:12145 - https://doi.org/10.1038/s41598-020-69154-0 (Ver material suplementar)
+                a função de AC deve ser sempre 1 em lag = 0 (independente de T)
+    """
+    if normalize:
+        return calc_AutoCorr_normalized_lag(x,tau)
+    return calc_AutoCorr_not_normalized_lag(x,tau)
+
+#pythran export calc_AutoCorr_not_normalized(  float[])
+#pythran export calc_AutoCorr_not_normalized(float64[])
+def calc_AutoCorr_not_normalized(x):
+    """
+    equivalente a numpy.correlate e scipy.signal.correlate
+    com mode='full' ou 'same'
+    https://numpy.org/doc/stable/reference/generated/numpy.correlate.html
+    produto escalar de x(t) com x(t+tau)
+    C(tau) = x(t) . x(t+tau)
+    onde o produto escalar (.) varre todo o tempo
+    """
+    #### the implementation below is completely equivalent to the numpy.correlate(x,x,'full'), for real-valued x
+    #### so I'll keep it here for reference
+    #C    = numpy.zeros(x.size) # use int(x.size/2) for equavalence with 'same' in numpy.correlate, or this for equivalence with 'full'
+    #xpad = numpy.zeros(x.size + 2*C.size)
+    #xpad[C.size:(C.size+x.size)] = x
+    #for tau in range(C.size):
+    #    C[tau] = numpy.dot(xpad[C.size:(C.size+x.size)],xpad[(C.size+tau):(C.size+x.size+tau)])
+    #return C
+    get_from_max_on = lambda C: C[numpy.nanargmax(C):]
+    return get_from_max_on(numpy.correlate(x,x,'full'))
+
+#pythran export calc_AutoCorr_not_normalized_lag(  float[], int)
+#pythran export calc_AutoCorr_not_normalized_lag(float64[], int)
+def calc_AutoCorr_not_normalized_lag(x,tau):
+    """
+    equivalente a numpy.correlate e scipy.signal.correlate
+    com mode='full' ou 'same'
+    https://numpy.org/doc/stable/reference/generated/numpy.correlate.html
+    produto escalar de x(t) com x(t+tau)
+    C(tau) = x(t) . x(t+tau)
+    onde o produto escalar (.) varre todo o tempo
+    """
+    # the calculation below is the same as
+    # numpy.correlate(x,x,'valid')
+    #### the implementation below is completely equivalent to the numpy.correlate(x,x,'full'), for real-valued x
+    #### so I'll keep it here for reference
+    xpad = numpy.zeros(3*x.size)
+    xpad[x.size:(x.size+x.size)] = x
+    return numpy.dot(xpad[x.size:(x.size+x.size)],xpad[(x.size+tau):(x.size+x.size+tau)])
+
+#pythran export calc_AutoCorr_normalized(  float[])
+#pythran export calc_AutoCorr_normalized(float64[])
+def calc_AutoCorr_normalized(x):
+    C    = numpy.zeros(x.size) # use int(x.size/2) for equavalence with 'same' in numpy.correlate, or this for equivalence with 'full'
+    xm   = numpy.mean(x)
+    xv   = numpy.var(x)
+    xpad = numpy.zeros(x.size + 2*C.size) # padding x with zeros to deal with boundary conditions
+    xpad[C.size:(C.size+x.size)] = x
+    for tau in range(C.size):
+        C[tau] = numpy.mean((xpad[C.size:(C.size+x.size)]-xm)*(xpad[(C.size+tau):(C.size+x.size+tau)]-xm))/xv
+    return C
+
+#pythran export calc_AutoCorr_normalized_lag(  float[], int)
+#pythran export calc_AutoCorr_normalized_lag(float64[], int)
+def calc_AutoCorr_normalized_lag(x, tau):
+    xm   = numpy.mean(x)
+    xv   = numpy.var(x)
+    xpad = numpy.zeros(3*x.size) # padding x with zeros to deal with boundary conditions
+    xpad[x.size:(x.size+x.size)] = x
+    return numpy.mean((xpad[x.size:(x.size+x.size)]-xm)*(xpad[(x.size+tau):(x.size+x.size+tau)]-xm))/xv
+
 #pythran export KTLog_FuncMapa(  float[], int, float, float, float, float, float, float)
 #pythran export KTLog_FuncMapa(float64[], int, float, float, float, float, float, float)
 def KTLog_FuncMapa(x, t, K, T, delta, lamb, xR, H):
@@ -213,6 +305,15 @@ def KTTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
 #pythran export KTzTanh_FuncMapa(float64[], int, float, float, float, float, float, float)
 def KTzTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
     arg  = (x[0] - K*x[1] + x[2] + H) / T
+    x[1] = x[0]
+    x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
+    x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    return x
+
+#pythran export KTzTanh_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTzTanh_FuncMapa(float64[], int, float, float, float, float, float, float)
+def KTCTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+    arg  = (x[0] - K*x[1] + H) / x[2]
     x[1] = x[0]
     x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
     x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
