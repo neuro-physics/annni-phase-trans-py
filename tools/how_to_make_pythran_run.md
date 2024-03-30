@@ -17,8 +17,11 @@ CXX=
 ignoreflags=-Wstrict-prototypes
 ```
 
+the config above is the that gives most errors, but at least it may give more clues about what seem not to be working... there are many seemingly syntax errors, so maybe the C++ compiler is not being called/identified properly?
+
 or
 
+the one below didn't work
 ```
 [compiler]
 defines=

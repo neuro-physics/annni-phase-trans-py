@@ -25,12 +25,12 @@ complex_hook = False
 [compiler]
 defines=
 undefs=
-include_dirs=
-libs=
-library_dirs=
-cflags=-std=c++11 -fno-math-errno -fvisibility=hidden -fno-wrapv -Wno-unused-function -Wno-int-in-bool-context -Wno-unknown-warning-option -Wno-unused-variable -Wmaybe-uninitialized
-ldflags=-fvisibility=hidden -Wl,-strip-all
-blas=blas
+include_dirs=D:\\Dropbox\\p\\programas\\cpp\\xianyi-OpenBLAS-d2b11c4
+libs=libopenblas_haswellp-r0.3.13.a
+library_dirs=D:\\Dropbox\\p\\programas\\cpp\\xianyi-OpenBLAS-d2b11c4
+cflags=
+ldflags=
+blas=
 CC=
 CXX=
 ignoreflags=-Wstrict-prototypes
