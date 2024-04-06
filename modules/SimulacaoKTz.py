@@ -5,7 +5,7 @@ from numba import jit,vectorize,float64
 ######################                     K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome, seguir_ponto_fixo, usar_modulo_de_m, percent_amostras_bootstrap, num_repete_bootstrap
 #pythran export RodaSimulacao_Varios_T(float,       float[], float, float, float, float,          int,     int,        float[],       str,              bool,             bool,                      float,                  int)
 @jit(nopython=True)
-def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome,seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
+def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome, alpha_grad=1.0e-6, suscept_max_grad=1.0e2, seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
     """
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
     ignorando os primeiros t_transiente passos,
@@ -22,13 +22,26 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
     H                 -> campo magnetico externo
     t_transiente      -> intervalo de tempo transiente (a ser descartado da dinamica)
     t_total           -> intervalo total de tempo
-    x0                -> DEVE SER numpy.array condicao inicial ( 3 valores para ktz, ou 2 valores para kt )
+    x0                -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
+                         ktlog        : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                         ktzlog       : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                         kttanh       : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                         ktztanh      : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                         ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                         ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                         ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                         ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
     mapa_nome         -> nome do mapa a ser iterado:
-                         ktlog      : modelo KT com funcao logistica (x0 deve ter 2 valores)
-                         ktzlog     : modelo KT com adaptacao e funcao logistica (x0 deve ter 3 valores)
-                         kttanh     : modelo KT com tanh (x0 deve ter 2 valores)
-                         ktztanh    : modelo KT com adaptacao e funcao tanh (x0 deve ter 3 valores)
-                         ktzchialvo : modelo KT com adaptacao em T simplificando dinamica Chialvo et al 2020 Sci Rep
+                         ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
+                         ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
+                         kttanh       : modelo KT com tanh; x0=(m0,y0)
+                         ktztanh      : modelo KT com adaptacao e funcao tanh; x0=(m0,y0,z0)
+                         ktctanh      : modelo KT com adaptacao em T equivalente a dinamica de z, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                         ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                         ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                         ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+    alpha_grad        -> constante de passo do gradiente ascendente pra achar o maximo da susceptibilidade
+    suscept_max_grad  -> valor de maximo da susceptibilidade a ser obtido pelo gradiente ascendente
     seguir_ponto_fixo -> se True, então usa a condição inicial pro próximo T como o último estado do T anterior
     usar_modulo_de_m  -> se True, então usa |m| para calcular a media e a varririância
 
@@ -48,7 +61,7 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
     x_var_std = numpy.zeros(len(T_valores)) #[ 0.0 for _ in range(len(T_valores)) ]
     for k in range(len(T_valores)):
         T              = T_valores[k]
-        x_dados1       = RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome)
+        x_dados1       = RodaSimulacaoMapa(K,T,delta,lamb,xR,H, alpha_grad, suscept_max_grad,t_transiente,t_total,x0,mapa_nome)
         if seguir_ponto_fixo:
             x0 = x_dados1[-1,:]
         x_dados        = numpy.abs( x_dados1[:,0]) if usar_modulo_de_m else x_dados1[:,0]
@@ -65,7 +78,7 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
 ###############                            K,     T, delta,  lamb,    xR,   H_valores, t_transiente, t_total,             x0, mapa_nome, seguir_ponto_fixo, usar_modulo_de_m, percent_amostras_bootstrap, num_repete_bootstrap
 #pythran export RodaSimulacao_Varios_H(float, float, float, float, float,     float[],          int,     int,        float[],       str,              bool,             bool,                      float,                  int)
 @jit(nopython=True)
-def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_valores, t_transiente, t_total,             x0, mapa_nome,seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
+def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_valores, t_transiente, t_total,             x0, mapa_nome, alpha_grad=1.0e-6, suscept_max_grad=1.0e2, seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
     """
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
     ignorando os primeiros t_transiente passos,
@@ -82,13 +95,26 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
     H_valores         -> lista de campos magneticos externos
     t_transiente      -> intervalo de tempo transiente (a ser descartado da dinamica)
     t_total           -> intervalo total de tempo
-    x0                -> DEVE SER numpy.array condicao inicial ( 3 valores para ktz, ou 2 valores para kt )
+    x0                -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
+                         ktlog        : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                         ktzlog       : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                         kttanh       : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                         ktztanh      : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                         ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                         ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                         ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                         ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
     mapa_nome         -> nome do mapa a ser iterado:
-                         ktlog      : modelo KT com funcao logistica (x0 deve ter 2 valores)
-                         ktzlog     : modelo KT com adaptacao e funcao logistica (x0 deve ter 3 valores)
-                         kttanh     : modelo KT com tanh (x0 deve ter 2 valores)
-                         ktztanh    : modelo KT com adaptacao e funcao tanh (x0 deve ter 3 valores)
-                         ktzchialvo : modelo KT com adaptacao em T simplificando dinamica Chialvo et al 2020 Sci Rep
+                         ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
+                         ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
+                         kttanh       : modelo KT com tanh; x0=(m0,y0)
+                         ktztanh      : modelo KT com adaptacao e funcao tanh; x0=(m0,y0,z0)
+                         ktctanh      : modelo KT com adaptacao em T equivalente a dinamica de z, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                         ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                         ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                         ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+    alpha_grad        -> constante de passo do gradiente ascendente pra achar o maximo da susceptibilidade
+    suscept_max_grad  -> valor de maximo da susceptibilidade a ser obtido pelo gradiente ascendente
     seguir_ponto_fixo -> se True, então usa a condição inicial pro próximo T como o último estado do T anterior
     usar_modulo_de_m  -> se True, então usa |m| para calcular a media e a varririância
 
@@ -108,7 +134,7 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
     x_var_std = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
     for k in range(len(H_valores)):
         H              = H_valores[k]
-        x_dados1       = RodaSimulacaoMapa(K,T,delta,lamb,xR,H,t_transiente,t_total,x0,mapa_nome)
+        x_dados1       = RodaSimulacaoMapa(K,T,delta,lamb,xR,H, alpha_grad, suscept_max_grad,t_transiente,t_total,x0,mapa_nome)
         if seguir_ponto_fixo:
             x0 = x_dados1[-1,:]
         x_dados        = numpy.abs( x_dados1[:,0]) if usar_modulo_de_m else x_dados1[:,0]
@@ -125,7 +151,7 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
 ###########                           K,     T, delta,  lamb,    xR,     H, t_transiente, t_total,           x0, mapa_nome
 #pythran export RodaSimulacaoMapa(float, float, float, float, float, float,          int,     int,      float[], str      )
 @jit(nopython=True)
-def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, t_transiente, t_total,           x0,mapa_nome):
+def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, alpha_grad, suscept_max_grad, t_transiente, t_total,           x0,mapa_nome):
     """
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
     ignorando os primeiros t_transiente passos.
@@ -138,21 +164,32 @@ def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, t_tr
     H            -> campo magnetico externo
     t_transiente -> intervalo de tempo transiente (a ser descartado da dinamica)
     t_total      -> intervalo total de tempo
-    x0           -> DEVE SER numpy.array condicao inicial ( 3 valores para ktz, ou 2 valores para kt )
+    x0           -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
+                    ktlog        : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                    ktzlog       : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                    kttanh       : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                    ktztanh      : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                    ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                    ktcabstanh   : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                    ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                    ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
     mapa_nome    -> nome do mapa a ser iterado:
-                    ktlog      : modelo KT com funcao logistica (x0 deve ter 2 valores)
-                    ktzlog     : modelo KT com adaptacao e funcao logistica (x0 deve ter 3 valores)
-                    kttanh     : modelo KT com tanh (x0 deve ter 2 valores)
-                    ktztanh    : modelo KT com adaptacao e funcao tanh (x0 deve ter 3 valores)
-                    ktzchialvo : modelo KT com adaptacao em T simplificando dinamica Chialvo et al 2020 Sci Rep
+                    ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
+                    ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
+                    kttanh       : modelo KT com tanh; x0=(m0,y0)
+                    ktztanh      : modelo KT com adaptacao e funcao tanh; x0=(m0,y0,z0)
+                    ktctanh      : modelo KT com adaptacao em T equivalente a dinamica de z, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                    ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                    ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                    ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
     
     retorna:
         x_dados -> x em funcao do tempo; cada item nessa lista eh um passo de tempo do modelo
     """
-    mapa_nome_permitidos = [ 'ktlog', 'ktzlog', 'kttanh', 'ktztanh', 'ktzchialvo' ]
+    mapa_nome_permitidos = [ 'ktlog', 'ktzlog', 'kttanh', 'ktztanh', 'ktctanh', 'ktcabstanh', 'ktsuscept', 'ktsusceptabs' ]
     mapa_nome            = mapa_nome.lower()
     if not(mapa_nome in mapa_nome_permitidos):
-        print("mapa_nome deve ser um dos seguintes: ktlog, ktzlog, kttanh, ktztanh, ktzchialvo")
+        print("mapa_nome deve ser um dos seguintes: ktlog, ktzlog, kttanh, ktztanh, ktctanh, ktcabstanh, ktsuscept, ktsusceptabs")
     #assert (mapa_nome in mapa_nome_permitidos), "mapa_nome deve ser um dos seguintes: %s"%str(mapa_nome_permitidos)[1:-1]
 
     # selecionando o modelo que queremos rodar
@@ -164,20 +201,26 @@ def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, t_tr
         FuncMapa = KTTanh_FuncMapa
     elif mapa_nome == 'ktztanh':
         FuncMapa = KTzTanh_FuncMapa
-    elif mapa_nome == 'ktzchialvo':
+    elif mapa_nome == 'ktctanh':
         FuncMapa = KTCTanh_FuncMapa
+    elif mapa_nome == 'ktcabstanh':
+        FuncMapa = KTCAbsTanh_FuncMapa
+    elif mapa_nome == 'ktsuscept':
+        FuncMapa = KTSuscept_FuncMapa
+    elif mapa_nome == 'ktsusceptabs':
+        FuncMapa = KTSusceptAbs_FuncMapa
 
     # rodando o transiente da dinamica
     #x = numpy.array(x0, dtype=numpy.float64).flatten()
     x = x0
     for t in range(t_transiente):
-        x = FuncMapa(x, t, K, T, delta, lamb, xR, H)
+        x = FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha_grad, suscept_max_grad)
 
     # loop principal, onde guardamos os dados em funcao do tempo
     x_dados      = numpy.zeros((t_total-t_transiente+1,x.size),dtype=numpy.float64) #[ numpy.zeros(len(x0)) for _ in range(t_total-t_transiente+1) ]
     x_dados[0,:] = x
     for t in range(1,t_total-t_transiente+1):
-        x            = FuncMapa(x, t, K, T, delta, lamb, xR, H)
+        x            = FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha_grad, suscept_max_grad)
         x_dados[t,:] = x
     
     return x_dados #numpy.array(x_dados)
@@ -274,47 +317,111 @@ def calc_AutoCorr_normalized_lag(x, tau):
     xpad[x.size:(x.size+x.size)] = x
     return numpy.mean((xpad[x.size:(x.size+x.size)]-xm)*(xpad[(x.size+tau):(x.size+x.size+tau)]-xm))/xv
 
-#pythran export KTLog_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTLog_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
-def KTLog_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+def KTLog_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / T
     x[1] = x[0]
-    x[0] = arg / (1.0 + abs(arg))
+    x[0] = logfunc(arg) # arg / (1.0 + abs(arg))
     return x
 
-#pythran export KTzLog_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTzLog_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
-def KTzLog_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+def KTzLog_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + x[2] + H) / T
     x[1] = x[0]
     x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
-    x[0] = arg / (1.0 + abs(arg))
+    x[0] = logfunc(arg) # arg / (1.0 + abs(arg))
     return x
 
-#pythran export KTTanh_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTTanh_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
-def KTTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+def KTTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / T
     x[1] = x[0]
-    x[0] = 2.0 / (1.0 + my_exp(-2.0 * arg)) - 1.0 #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
     return x
 
-#pythran export KTzTanh_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTzTanh_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
-def KTzTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+def KTzTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + x[2] + H) / T
     x[1] = x[0]
     x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
-    x[0] = 2.0 / (1.0 + my_exp(-2.0 * arg)) - 1.0 #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
     return x
 
-#pythran export KTCTanh_FuncMapa(  float[], int, float, float, float, float, float, float)
+#pythran export KTCTanh_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
-def KTCTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H):
+def KTCTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / x[2]
     x[1] = x[0]
     x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
-    x[0] = 2.0 / (1.0 + my_exp(-2.0 * arg)) - 1.0 #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    return x
+
+#pythran export KTCAbsTanh_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
+@jit(nopython=True)
+def KTCAbsTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
+    arg  = (x[0] - K*x[1] + H) / x[2]
+    x[1] = x[0]
+    x[2] = (1.0-delta)*x[2] - lamb*(abs(x[0]) - xR)
+    x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
+    return x
+
+
+#pythran export KTSuscept_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
+@jit(nopython=True)
+def KTSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
+    # m1     -> x[0] # magnetizacao
+    # y1     -> x[1] # magnetizacao t anterior
+    # T1     -> x[2] # temperatura
+    # s1     -> x[3] # susceptibilidade
+    # teta_1 -> x[4] # susceptibilidade t anterior
+    # d1     -> x[5] # gradiente ascendente: sinal do passo na susceptibilidade
+    # delta1 -> x[6] # gradiente ascendente: tamanho do passo na susceptbilidade
+    x_aux     = x[0]
+    y_aux     = x[1]
+    T_aux     = x[2]
+    theta_aux = x[4]
+    # temperatura
+    x[2] = x[2] + x[6] * x[5] * alpha
+    # magnetizacao
+    x[1] = x[0]
+    x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
+    #susceptiblidade
+    x[4] = x[3]
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1)/T_aux)
+    # ajustando passo gradiente ascendente
+    x[5] = x[5]*sign(x[3] - x[4])
+    x[6] = abs(s_max - x[3])
+    return x
+
+#pythran export KTSusceptAbs_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
+@jit(nopython=True)
+def KTSusceptAbs_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
+    # m1     -> x[0] # magnetizacao
+    # y1     -> x[1] # magnetizacao t anterior
+    # T1     -> x[2] # temperatura
+    # s1     -> x[3] # susceptibilidade
+    # teta_1 -> x[4] # susceptibilidade t anterior
+    # d1     -> x[5] # gradiente ascendente: sinal do passo na susceptibilidade
+    # delta1 -> x[6] # gradiente ascendente: tamanho do passo na susceptbilidade
+    x_aux     = x[0]
+    y_aux     = x[1]
+    T_aux     = x[2]
+    theta_aux = x[4]
+    # temperatura
+    x[2] = x[2] + x[6] * x[5] * alpha
+    # magnetizacao
+    x[1] = x[0]
+    x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
+    #susceptiblidade
+    x[4] = x[3]
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1)/T_aux)
+    # ajustando passo gradiente ascendente
+    x[5] = x[5]*sign(abs(x[3]) - abs(x[4]))
+    x[6] = abs(s_max - abs(x[3]))
     return x
 
 #pythran export bootstrap_variance(     float[],int,int)
@@ -347,6 +454,26 @@ def KT_susceptibilidade(K,T,H,m_medio):
 @jit(nopython=True)
 def my_exp(x):
     return math.exp(x) if x < 709.782712893384 else numpy.inf #1.797693134862273e+308 # correct overflow error
+
+#pythran export tanh(float)
+@jit(nopython=True)
+def tanh(x):
+    return 2.0 / (1.0 + my_exp(-2.0 * x)) - 1.0
+
+#pythran export logfunc(float)
+@jit(nopython=True)
+def logfunc(x):
+    return x / (1.0 + abs(x))
+
+#pythran export sign(float)
+@jit(nopython=True)
+def sign(x):
+    if x == 0.0:
+        return 0.0
+    if x > 0.0:
+        return 1.0
+    else:
+        return -1.0
 
 #pythran export cosh(    float)
 #pythran export cosh(  float[])
