@@ -274,7 +274,7 @@ def calc_AutoCorr_not_normalized(x):
     #for tau in range(C.size):
     #    C[tau] = numpy.dot(xpad[C.size:(C.size+x.size)],xpad[(C.size+tau):(C.size+x.size+tau)])
     #return C
-    get_from_max_on = lambda C: C[numpy.nanargmax(C):]
+    get_from_max_on = lambda C: C[numpy.argmax(C):]
     return get_from_max_on(numpy.correlate(x,x,'full'))
 
 #pythran export calc_AutoCorr_not_normalized_lag(  float[], int)
