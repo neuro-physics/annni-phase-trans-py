@@ -20,6 +20,8 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
     lamb              -> escala de tempo de forcamento do feedback
     xR                -> magnetizacao de referencia
     H                 -> campo magnetico externo
+    alpha_grad        -> constante de passo para o algoritmo de gradiente ascendente da susceptibilidade
+    suscept_max_grad  -> maximo da susceptibilidade (para mapas ktsuscept, ktsusceptabs) ou log do maximo da susceptibilidade para mapa ktsusceptlog
     t_transiente      -> intervalo de tempo transiente (a ser descartado da dinamica)
     t_total           -> intervalo total de tempo
     x0                -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
@@ -31,6 +33,7 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
                          ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
                          ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
                          ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                         ktsusceptlog : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
     mapa_nome         -> nome do mapa a ser iterado:
                          ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
                          ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
@@ -40,6 +43,7 @@ def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR
                          ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
                          ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
                          ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                         ktsusceptlog : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
     alpha_grad        -> constante de passo do gradiente ascendente pra achar o maximo da susceptibilidade
     suscept_max_grad  -> valor de maximo da susceptibilidade a ser obtido pelo gradiente ascendente
     seguir_ponto_fixo -> se True, então usa a condição inicial pro próximo T como o último estado do T anterior
@@ -93,6 +97,8 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
     lamb              -> escala de tempo de forcamento do feedback
     xR                -> magnetizacao de referencia
     H_valores         -> lista de campos magneticos externos
+    alpha_grad        -> constante de passo para o algoritmo de gradiente ascendente da susceptibilidade
+    suscept_max_grad  -> maximo da susceptibilidade (para mapas ktsuscept, ktsusceptabs) ou log do maximo da susceptibilidade para mapa ktsusceptlog
     t_transiente      -> intervalo de tempo transiente (a ser descartado da dinamica)
     t_total           -> intervalo total de tempo
     x0                -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
@@ -104,6 +110,7 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
                          ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
                          ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
                          ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                         ktsusceptlog : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
     mapa_nome         -> nome do mapa a ser iterado:
                          ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
                          ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
@@ -113,6 +120,7 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
                          ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
                          ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
                          ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                         ktsusceptlog : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
     alpha_grad        -> constante de passo do gradiente ascendente pra achar o maximo da susceptibilidade
     suscept_max_grad  -> valor de maximo da susceptibilidade a ser obtido pelo gradiente ascendente
     seguir_ponto_fixo -> se True, então usa a condição inicial pro próximo T como o último estado do T anterior
@@ -156,40 +164,44 @@ def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, alph
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
     ignorando os primeiros t_transiente passos.
 
-    K            -> parametro de interacao entre camadas da rede de Bethe
-    T            -> parametro de temperatura
-    delta        -> escala de tempo de recuperacao do feedback
-    lamb         -> escala de tempo de forcamento do feedback
-    xR           -> magnetizacao de referencia
-    H            -> campo magnetico externo
-    t_transiente -> intervalo de tempo transiente (a ser descartado da dinamica)
-    t_total      -> intervalo total de tempo
-    x0           -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
-                    ktlog        : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
-                    ktzlog       : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
-                    kttanh       : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
-                    ktztanh      : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
-                    ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
-                    ktcabstanh   : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
-                    ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
-                    ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
-    mapa_nome    -> nome do mapa a ser iterado:
-                    ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
-                    ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
-                    kttanh       : modelo KT com tanh; x0=(m0,y0)
-                    ktztanh      : modelo KT com adaptacao e funcao tanh; x0=(m0,y0,z0)
-                    ktctanh      : modelo KT com adaptacao em T equivalente a dinamica de z, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
-                    ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
-                    ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
-                    ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+    K                -> parametro de interacao entre camadas da rede de Bethe
+    T                -> parametro de temperatura
+    delta            -> escala de tempo de recuperacao do feedback
+    lamb             -> escala de tempo de forcamento do feedback
+    xR               -> magnetizacao de referencia
+    H                -> campo magnetico externo
+    alpha_grad       -> constante de passo para o algoritmo de gradiente ascendente da susceptibilidade
+    suscept_max_grad -> maximo da susceptibilidade (para mapas ktsuscept, ktsusceptabs) ou log do maximo da susceptibilidade para mapa ktsusceptlog
+    t_transiente     -> intervalo de tempo transiente (a ser descartado da dinamica)
+    t_total          -> intervalo total de tempo
+    x0               -> DEVE SER numpy.array do tipo float com a condicao inicial de acordo com o mapa_nome escolhido:
+                        ktlog        : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                        ktzlog       : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                        kttanh       : x0=numpy.array((m0,y0),dtype=numpy.float64)                         => magnetizacao inicial; magnetizacao instante anterior inicial
+                        ktztanh      : x0=numpy.array((m0,y0,z0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; z inicial (campo adaptativo)
+                        ktctanh      : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                        ktcabstanh   : x0=numpy.array((m0,y0,T0),dtype=numpy.float64)                      => magnetizacao inicial; magnetizacao instante anterior inicial; T inicial (temperatura)
+                        ktsuscept    : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                        ktsusceptabs : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+                        ktsusceptlog : x0=numpy.array((m0,y0,T0,s0,teta_0,d0,delta0),dtype=numpy.float64)  => magnetizacao, magnetizacao t anterior, temperatura, susceptibilidade, susceptibilidade t anterior, gradiente ascendente: sinal do passo na susceptibilidade, gradiente ascendente: tamanho do passo na susceptbilidade
+    mapa_nome        -> nome do mapa a ser iterado:
+                        ktlog        : modelo KT com funcao logistica; x0=(m0,y0,T0)
+                        ktzlog       : modelo KT com adaptacao e funcao logistica; x0=(m0,y0,z0)
+                        kttanh       : modelo KT com tanh; x0=(m0,y0)
+                        ktztanh      : modelo KT com adaptacao e funcao tanh; x0=(m0,y0,z0)
+                        ktctanh      : modelo KT com adaptacao em T equivalente a dinamica de z, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                        ktcabstanh   : modelo KT com adaptacao em T equivalente a dinamica de z, usando feedback do valor abs de m, simplificando dinamica Chialvo et al 2020 Sci Rep; x0=(m0,y0,T0)
+                        ktsuscept    : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                        ktsusceptabs : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade (em modulo); x0=(m0,y0,T0,s0,teta_0,d0,delta0)
+                        ktsusceptlog : modelo KT com dinamica de gradiente ascendente em direcao ao maximo da susceptibilidade; x0=(m0,y0,T0,s0,teta_0,d0,delta0)
     
     retorna:
         x_dados -> x em funcao do tempo; cada item nessa lista eh um passo de tempo do modelo
     """
-    mapa_nome_permitidos = [ 'ktlog', 'ktzlog', 'kttanh', 'ktztanh', 'ktctanh', 'ktcabstanh', 'ktsuscept', 'ktsusceptabs' ]
+    mapa_nome_permitidos = [ 'ktlog', 'ktzlog', 'kttanh', 'ktztanh', 'ktctanh', 'ktcabstanh', 'ktsuscept', 'ktsusceptabs', 'ktsusceptlog' ]
     mapa_nome            = mapa_nome.lower()
     if not(mapa_nome in mapa_nome_permitidos):
-        print("mapa_nome deve ser um dos seguintes: ktlog, ktzlog, kttanh, ktztanh, ktctanh, ktcabstanh, ktsuscept, ktsusceptabs")
+        print("mapa_nome deve ser um dos seguintes: ktlog, ktzlog, kttanh, ktztanh, ktctanh, ktcabstanh, ktsuscept, ktsusceptabs, ktsusceptlog")
     #assert (mapa_nome in mapa_nome_permitidos), "mapa_nome deve ser um dos seguintes: %s"%str(mapa_nome_permitidos)[1:-1]
 
     # selecionando o modelo que queremos rodar
@@ -209,6 +221,8 @@ def RodaSimulacaoMapa(                K,     T, delta,  lamb,    xR,     H, alph
         FuncMapa = KTSuscept_FuncMapa
     elif mapa_nome == 'ktsusceptabs':
         FuncMapa = KTSusceptAbs_FuncMapa
+    elif mapa_nome == 'ktsusceptlog':
+        FuncMapa = KTLogSuscept_FuncMapa
 
     # rodando o transiente da dinamica
     #x = numpy.array(x0, dtype=numpy.float64).flatten()
@@ -369,6 +383,32 @@ def KTCAbsTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
     return x
 
+#pythran export KTLogSuscept_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
+@jit(nopython=True)
+def KTLogSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, log_s_max):
+    # m1     -> x[0] # magnetizacao
+    # y1     -> x[1] # magnetizacao t anterior
+    # T1     -> x[2] # temperatura
+    # s1     -> x[3] # susceptibilidade
+    # teta_1 -> x[4] # susceptibilidade t anterior
+    # d1     -> x[5] # gradiente ascendente: sinal do passo na susceptibilidade
+    # delta1 -> x[6] # gradiente ascendente: tamanho do passo na susceptbilidade
+    x_aux     = x[0]
+    y_aux     = x[1]
+    T_aux     = x[2]
+    theta_aux = x[4]
+    # temperatura
+    x[2] = x[2] + x[6] * x[5] * alpha
+    # magnetizacao
+    x[1] = x[0]
+    x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
+    #susceptiblidade
+    x[4] = x[3]
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1.0)/T_aux)
+    # ajustando passo gradiente ascendente
+    x[5] = x[5]*sign(x[3] - x[4])
+    x[6] = abs(log_s_max - math.log(x[3]))
+    return x
 
 #pythran export KTSuscept_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
@@ -391,7 +431,7 @@ def KTSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
     #susceptiblidade
     x[4] = x[3]
-    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1)/T_aux)
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1.0)/T_aux)
     # ajustando passo gradiente ascendente
     x[5] = x[5]*sign(x[3] - x[4])
     x[6] = abs(s_max - x[3])
@@ -418,7 +458,7 @@ def KTSusceptAbs_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
     #susceptiblidade
     x[4] = x[3]
-    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1)/T_aux)
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1.0)/T_aux)
     # ajustando passo gradiente ascendente
     x[5] = x[5]*sign(abs(x[3]) - abs(x[4]))
     x[6] = abs(s_max - abs(x[3]))
