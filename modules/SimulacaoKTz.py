@@ -5,7 +5,7 @@ from numba import jit,vectorize,float64
 ######################                     K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome, seguir_ponto_fixo, usar_modulo_de_m, percent_amostras_bootstrap, num_repete_bootstrap
 #pythran export RodaSimulacao_Varios_T(float,       float[], float, float, float, float,          int,     int,        float[],       str,              bool,             bool,                      float,                  int)
 @jit(nopython=True)
-def RodaSimulacao_Varios_T(                K,     T_valores, delta,  lamb,    xR,     H, t_transiente, t_total,             x0, mapa_nome, alpha_grad=1.0e-6, suscept_max_grad=1.0e2, seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
+def RodaSimulacao_Varios_T(K, T_valores, delta,  lamb, xR, H, t_transiente, t_total, x0, mapa_nome, alpha_grad=1.0e-6, suscept_max_grad=1.0e2, seguir_ponto_fixo=False,usar_modulo_de_m=False,percent_amostras_bootstrap=0.5,num_repete_bootstrap=0):
     """
     Essa funcao itera o mapa identificado por 'mapa_nome' por um total de t_total passos de tempo,
     ignorando os primeiros t_transiente passos,
@@ -137,6 +137,7 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
         x_suscept  -> susceptibilidade da magnetizacao (x) em funcao de H
     """
     x_media   = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
+    x_max     = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
     x_suscept = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
     x_var     = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
     x_var_std = numpy.zeros(len(H_valores)) #[ 0.0 for _ in range(len(H_valores)) ]
@@ -147,13 +148,14 @@ def RodaSimulacao_Varios_H(                K,     T, delta,  lamb,    xR,   H_va
             x0 = x_dados1[-1,:]
         x_dados        = numpy.abs( x_dados1[:,0]) if usar_modulo_de_m else x_dados1[:,0]
         x_media[k]     = numpy.mean(x_dados )
+        x_max[k]       = numpy.max( x_dados )
         x_var[k]       = numpy.var( x_dados )
         x_suscept[k]   = KT_susceptibilidade(K, T, H, x_media[k])
         if num_repete_bootstrap > 0:
             _,x_var_std[k] = bootstrap_variance(x_dados,int(percent_amostras_bootstrap*x_dados.size),num_repete_bootstrap)
         else:
             x_var_std[k] = numpy.nan
-    return x_media,x_var,x_var_std,x_suscept
+    return x_media,x_max,x_var,x_var_std,x_suscept
     #return numpy.array(x_media),numpy.array(x_var),numpy.array(x_var_std),numpy.array(x_suscept)
 
 ###########                           K,     T, delta,  lamb,    xR,     H, t_transiente, t_total,           x0, mapa_nome
@@ -336,7 +338,7 @@ def calc_AutoCorr_normalized_lag(x, tau):
 def KTLog_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / T
     x[1] = x[0]
-    x[0] = logfunc(arg) # arg / (1.0 + abs(arg))
+    x[0] = logfunc(arg) # arg / (1.0 + abs(arg))   #logfunc-é igual ao tanh
     return x
 
 #pythran export KTzLog_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
@@ -370,7 +372,8 @@ def KTzTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
 def KTCTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / x[2]
     x[1] = x[0]
-    x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
+    #x[2] = (1.0-delta)*x[2] - lamb*(x[0] - xR)
+    x[2] = (1.0 - delta + lamb*abs(x[0]))*x[2]
     x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
     return x
 
@@ -379,7 +382,7 @@ def KTCTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
 def KTCAbsTanh_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     arg  = (x[0] - K*x[1] + H) / x[2]
     x[1] = x[0]
-    x[2] = (1.0-delta)*x[2] - lamb*(abs(x[0]) - xR)
+    x[2] = (1.0-delta)*x[2] + lamb*(abs(x[0]) - xR)
     x[0] = tanh(arg) #x[0] = 2.0 / (1.0 + numpy.exp(-2.0 * arg)) - 1.0
     return x
 
@@ -410,9 +413,39 @@ def KTLogSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, log_s_max):
     x[6] = abs(log_s_max - math.log(x[3]))
     return x
 
-#pythran export KTSuscept_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
 @jit(nopython=True)
 def KTSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
+    # m1     -> x[0] # magnetizacao
+    # y1     -> x[1] # magnetizacao t anterior
+    # T1     -> x[2] # temperatura
+    # s1     -> x[3] # susceptibilidade "normalizada" pelo maximo
+    # teta_1 -> x[4] # susceptibilidade "normalizada" no passo de tempo t anterior
+    # d1     -> x[5] # gradiente ascendente: sinal do passo na susceptibilidade
+    # delta1 -> x[6] # gradiente ascendente: tamanho do passo na susceptbilidade
+    x_aux     = x[0]  #igual ao m_anterior
+    y_aux     = x[1]
+    T_aux     = x[2]  #igual ao T_anterior
+    theta_aux = x[4]
+    # temperatura
+    x[2] = x[2] + x[6] * x[5] * alpha
+    # magnetizacao
+    x[1] = x[0]
+    x[0] = tanh((x[0] - K*y_aux + H)/T_aux)
+    #susceptiblidade
+    x[4] = x[3]
+    #x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * (((x[3]-K*theta_aux)/T_aux) + 1.0/(T*s_max))
+    x[3] = (1.0-x_aux*tanh((x_aux - K*y_aux + H)/T_aux)) * ((x[3]-K*theta_aux+1.0)/T_aux)
+    # ajustando passo gradiente ascendente
+    x[5] = x[5]*sign(x[3] - x[4])
+    #x[6] = abs(1.0 - x[3])
+    x[6] = abs(1.0 - x[3]/s_max)
+    #x[6] = abs(s_max/x[3] - 1.0)
+    return x
+
+
+#pythran export KTSuscept_FuncMapa(  float[], int, float, float, float, float, float, float, float, float)
+@jit(nopython=True)
+def KTSuscept_FuncMapa_Original(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     # m1     -> x[0] # magnetizacao
     # y1     -> x[1] # magnetizacao t anterior
     # T1     -> x[2] # temperatura
@@ -420,9 +453,9 @@ def KTSuscept_FuncMapa(x, t, K, T, delta, lamb, xR, H, alpha, s_max):
     # teta_1 -> x[4] # susceptibilidade t anterior
     # d1     -> x[5] # gradiente ascendente: sinal do passo na susceptibilidade
     # delta1 -> x[6] # gradiente ascendente: tamanho do passo na susceptbilidade
-    x_aux     = x[0]
+    x_aux     = x[0]  #igual ao m_anterior
     y_aux     = x[1]
-    T_aux     = x[2]
+    T_aux     = x[2]  #igual ao T_anterior
     theta_aux = x[4]
     # temperatura
     x[2] = x[2] + x[6] * x[5] * alpha
@@ -487,6 +520,14 @@ def KT_susceptibilidade(K,T,H,m_medio):
     """
     #return 2.0 / (-2.0+2*K+T*(1.0+numpy.cosh(2.0*((1-K)*m_medio+H)/T)) )
     return 2.0 / (-2.0  +  2.0*K  +  T * (  1.0  +  cosh(2.0*((1-K)*m_medio+H)/T)  ))
+    #return 1.0/(K-1.0+T/(( sech(   ((1-K)*m_medio+H)/T   ) )**2))
+
+@jit(nopython=True)
+def KT_susceptibilidade2(K,T,H,m_medio):
+    """
+    retorna a derivada da magnetizacao em relacao a H
+    """
+    return (1.0-m_medio**2) / (T - (1.0-K) * (1.0 - m_medio**2))
     #return 1.0/(K-1.0+T/(( sech(   ((1-K)*m_medio+H)/T   ) )**2))
 
 #pythran export my_exp(    float)
